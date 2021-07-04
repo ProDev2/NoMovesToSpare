@@ -16,14 +16,11 @@
 
 package nmts.game;
 
-import java.util.Locale;
-
 public class Config {
     /* ---------------- Game ---------------- */
-    public static final long FPS = -1L;
-    public static final long CPS = 30L;
+    public static final int CPS = -1;
 
-    public static final boolean ANTIALIASING = false;
+    public static final boolean ANTIALIASING = true;
 
     public static final String TITLE = "No Moves To Spare";
 }

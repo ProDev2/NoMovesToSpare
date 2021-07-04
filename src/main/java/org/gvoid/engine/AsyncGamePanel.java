@@ -17,33 +17,39 @@
 package org.gvoid.engine;
 
 import java.awt.*;
+import java.util.Timer;
+import java.util.TimerTask;
 import javax.swing.*;
 
 @SuppressWarnings("UnusedReturnValue")
-public class GamePanel extends JPanel {
+public class AsyncGamePanel extends JPanel {
     private Game game;
-    private int cps;
+    private long fps, cps;
     private boolean antialias;
 
-    private Timer updateTimer;
-    private Timer paintTimer;
+    private Timer timer;
 
-    public GamePanel(LayoutManager layout, boolean isDoubleBuffered) {
+    private TimerTask updateTask;
+    private TimerTask paintTask;
+
+    private long lastRepaint = -1L;
+
+    public AsyncGamePanel(LayoutManager layout, boolean isDoubleBuffered) {
         super(layout, isDoubleBuffered);
         init();
     }
 
-    public GamePanel(LayoutManager layout) {
+    public AsyncGamePanel(LayoutManager layout) {
         super(layout);
         init();
     }
 
-    public GamePanel(boolean isDoubleBuffered) {
+    public AsyncGamePanel(boolean isDoubleBuffered) {
         super(isDoubleBuffered);
         init();
     }
 
-    public GamePanel() {
+    public AsyncGamePanel() {
         super();
         init();
     }
@@ -56,15 +62,11 @@ public class GamePanel extends JPanel {
             tr.printStackTrace();
         }
 
-        cps = -1;
+        fps = -1L;
+        cps = 30L;
         antialias = false;
 
         update();
-    }
-
-    public void cancel() {
-        game = null;
-        stopUpdate();
     }
 
     public void setGame(Game game) {
@@ -87,7 +89,17 @@ public class GamePanel extends JPanel {
         update();
     }
 
-    public void setCps(int cps) {
+    public void setFps(long fps) {
+        this.fps = fps;
+
+        try {
+            repaint();
+        } catch (Throwable tr) {
+            tr.printStackTrace();
+        }
+    }
+
+    public void setCps(long cps) {
         this.cps = cps;
         update();
     }
@@ -102,69 +114,34 @@ public class GamePanel extends JPanel {
         update();
     }
 
-    private void stopUpdate() {
-        try {
-            if (updateTimer != null)
-                updateTimer.stop();
-        } catch (Exception e) {
-            e.printStackTrace();
+    private boolean stopUpdate() {
+        Timer timer = this.timer;
+        if (timer != null) {
+            try {
+                if (updateTask != null) {
+                    updateTask.cancel();
+                    updateTask = null;
+                }
+            } catch (Throwable tr) {
+                tr.printStackTrace();
+                return false;
+            }
+            try {
+                if (paintTask != null) {
+                    paintTask.cancel();
+                    paintTask = null;
+                }
+            } catch (Throwable tr) {
+                tr.printStackTrace();
+                return false;
+            }
         }
-        try {
-            if (paintTimer != null)
-                paintTimer.stop();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        updateTimer = null;
-        paintTimer = null;
+        return true;
     }
 
     public boolean update() {
-        stopUpdate();
-        if (game == null || !isEnabled()) {
+        if (!stopUpdate())
             return false;
-        }
-
-        updateTimer = new Timer(1000 / cps, e -> {
-            try {
-                Game game = GamePanel.this.game;
-                if (game == null) {
-                    stopUpdate();
-                    return;
-                }
-
-                onUpdate();
-                game.update();
-            } catch (Throwable tr) {
-                tr.printStackTrace();
-            }
-        });
-        paintTimer = new Timer(5000, e -> {
-            try {
-                repaint();
-            } catch (Exception ex) {
-                ex.printStackTrace();
-            }
-        });
-
-        updateTimer.setCoalesce(true);
-        paintTimer.setCoalesce(true);
-
-        updateTimer.setRepeats(true);
-        paintTimer.setRepeats(true);
-
-        updateTimer.start();
-        paintTimer.start();
-
-        try {
-            repaint();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        return true;
-
-        /*
         Timer timer = this.timer;
         if (game != null && timer == null) {
             try {
@@ -191,7 +168,7 @@ public class GamePanel extends JPanel {
                 @Override
                 public void run() {
                     try {
-                        Game game = GamePanel.this.game;
+                        Game game = AsyncGamePanel.this.game;
                         if (game == null) {
                             stopUpdate();
                             return;
@@ -216,12 +193,14 @@ public class GamePanel extends JPanel {
             tr.printStackTrace();
             return false;
         }
-        */
     }
 
     @Override
     protected void paintComponent(Graphics graphics) {
         super.paintComponent(graphics);
+
+        if (graphics == null) return;
+        if (!(graphics instanceof Graphics2D)) return;
 
         Game game = this.game;
         if (game == null)
@@ -233,15 +212,6 @@ public class GamePanel extends JPanel {
         } catch (Throwable tr) {
             tr.printStackTrace();
         }
-
-        try {
-            repaint();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        if (graphics == null) return;
-        if (!(graphics instanceof Graphics2D)) return;
 
         try {
             try {
@@ -259,9 +229,7 @@ public class GamePanel extends JPanel {
             onPostRender(graphics2D);
         } catch (Throwable tr) {
             tr.printStackTrace();
-        }
-        /*
-        finally {
+        } finally {
             long time = System.currentTimeMillis();
             long delta = lastRepaint >= 0L ? Math.max(time - lastRepaint, 0L) : 0L;
             long remTime = fps > 0L ? Math.max((1000L / fps) - delta, 0L) : 0L;
@@ -299,7 +267,6 @@ public class GamePanel extends JPanel {
                 }
             }
         }
-        */
     }
 
     protected void onUpdate() {

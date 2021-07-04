@@ -63,7 +63,7 @@ public class GameFrame extends JFrame implements Closeable, MouseListener {
         int y = (d.height - getSize().height) / 2;
         setLocation(x, y);
 
-        setTitle("Game");
+        setTitle(Config.TITLE);
         setResizable(true);
 
         Container cp = getContentPane();
@@ -73,7 +73,6 @@ public class GameFrame extends JFrame implements Closeable, MouseListener {
         screen.setBounds(0, 0, 1047, 508);
         screen.setBackground(Color.WHITE);
 
-        screen.setFps(Config.FPS);
         screen.setCps(Config.CPS);
         screen.setAntialias(Config.ANTIALIASING);
 
@@ -103,6 +102,10 @@ public class GameFrame extends JFrame implements Closeable, MouseListener {
         if (screen != null) {
             screen.setGame(game);
         }
+    }
+
+    public void setAntialias(boolean antialias) {
+        screen.setAntialias(antialias);
     }
 
     @Override

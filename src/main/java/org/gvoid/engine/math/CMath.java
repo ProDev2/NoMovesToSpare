@@ -95,7 +95,7 @@ public class CMath {
         double sx = s[0], sy = s[1], ex, ey;
         double v1x, v1y, v2x, v2y;
         double ps, tx, ty, dtx, dty, dtl, dtd;
-        int si = 0, fi = -1, ai = 2;
+        int si = 1, fi = -1, ai = 2;
         do {
             v1x = (ex = s[ai++]) - sx;
             v1y = (ey = s[ai++]) - sy;

@@ -1,8 +1,8 @@
 package nmts.game.screen;
 
 import java.awt.*;
-import org.gvoid.engine.math.CMath;
 import org.gvoid.engine.Game;
+import org.gvoid.engine.math.CMath;
 
 public class TestScreen extends Game {
     private double[] shape;
@@ -58,7 +58,7 @@ public class TestScreen extends Game {
         double py = cursor.pos.y;
 
         double[] t = new double[5];
-        int i = CMath.distToShape(t, s, null, s.length / 2 - 1, px, py, true);
+        int i = CMath.distToShape(t, s, null, s.length / 2, px, py, true);
         CMath.calc(t);
 
         double hpx = t[3], hpy = t[4], hr = 5d;

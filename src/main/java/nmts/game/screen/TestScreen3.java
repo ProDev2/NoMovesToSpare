@@ -1,42 +1,36 @@
 package nmts.game.screen;
 
 import java.awt.*;
+import nmts.game.builder.MazeBuilder;
+import nmts.game.holder.MazeCollider;
 import org.gvoid.engine.Game;
 import org.gvoid.engine.math.CMath;
 
-public class TestScreen2 extends Game {
+public class TestScreen3 extends Game {
     private double[] shape;
     private long[] skip;
+    private int len;
 
-    public TestScreen2() {
-        shape = new double[0];
+    public TestScreen3() {
+        shape = new double[1000];
         skip = CMath.nBits(1000);
+        len = 0;
     }
 
     @Override
     protected void onUpdate(float deltaTime) {
-        if (shape.length <= 0) {
-            addTestPoint(0.2d, 0.2d);
-            addTestPoint(0.4d, 0.1d);
-            addTestPoint(0.3d, 0.5d);
-            addTestPoint(0.34d, 0.6d);
-            addTestPoint(0.7d, 0.4d);
-            addTestPoint(0.5d, 0.9d);
-            addTestPoint(0.1d, 0.85d);
-            addTestPoint(0.15d, 0.4d);
+        if (len <= 0) {
+            int t1 = MazeBuilder.WT | MazeBuilder.WB;
+            int t2 = MazeBuilder.WL | MazeBuilder.WR;
 
-            CMath.set(skip, 4);
+            len = MazeCollider.insert(0, 0, 60, t1, shape, skip, len);
+            len = MazeCollider.insert(60, 60, 60, t2, shape, skip, len);
+
+            System.out.println("(" + shape[0] + ", " + shape[1] + ")");
+            for (int i = 0, ai = 2; i <= len; i++, ai += 2) {
+                System.out.println(i + " > " + CMath.has(skip, i) + " (" + shape[ai] + ", " + shape[ai + 1] + ")");
+            }
         }
-    }
-
-    public void addTestPoint(double x, double y) {
-        double ax = size.x * x, ay = size.y * y;
-        int l = shape.length, nl = l + 2;
-        double[] n = new double[nl];
-        System.arraycopy(shape, 0, n, 0, l);
-        n[l++] = ax;
-        n[l++] = ay;
-        shape = n;
     }
 
     private Double ppx, ppy;
@@ -51,19 +45,23 @@ public class TestScreen2 extends Game {
         System.arraycopy(skip, 0, sp, 0, skip.length);
 
 
-        int si = 2, sl = s.length;
+        int si = 2, sl = len;
         double sx = s[0], sy = s[1], ex, ey;
         do {
+            int ii = si / 2;
+
             ex = s[si++];
             ey = s[si++];
 
-            graphics.setColor(Color.BLACK);
-            graphics.setStroke(new BasicStroke());
-            graphics.drawLine((int) sx, (int) sy, (int) ex, (int) ey);
+            if (!CMath.has(sp, ii)) {
+                graphics.setColor(Color.BLACK);
+                graphics.setStroke(new BasicStroke());
+                graphics.drawLine((int) sx, (int) sy, (int) ex, (int) ey);
+            }
 
             sx = ex;
             sy = ey;
-        } while (si < sl);
+        } while (si < sl * 2);
 
         double hr = 20d;
 
@@ -86,7 +84,7 @@ public class TestScreen2 extends Game {
         double[] t = new double[5];
         //int i = CMath.distToShape(t, s, skip, px, py, true);
         //CMath.calc(t);
-        int i = CMath.castSphere(t, s, sp, s.length / 2, px, py, dx, dy, Double.MAX_VALUE, hr, true, true);
+        int i = CMath.castSphere(t, s, sp, sl, px, py, dx, dy, Double.MAX_VALUE, hr, true, true);
         if (i < 0) return;
 
         //double hpx = t[3], hpy = t[4];
