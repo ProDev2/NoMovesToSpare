@@ -2,6 +2,7 @@ package nmts.game.screen;
 
 import java.awt.*;
 import java.awt.event.KeyEvent;
+import java.awt.geom.AffineTransform;
 import nmts.game.holder.Camera;
 import nmts.game.holder.Maze;
 import nmts.game.holder.MazeCollider;
@@ -15,6 +16,14 @@ import static nmts.game.builder.MazeBuilder.WR;
 import static nmts.game.builder.MazeBuilder.WT;
 
 public class PlayScreen extends Game {
+    public static final int FLAG_ROTATE_VIEW = 1;
+    public static final int FLAG_INFINITE_MOVES = 2;
+    public static final int FLAG_NO_WALL_TOUCH = 4;
+    public static final int FLAG_INVERT_KEYS = 8;
+    public static final int FLAG_SHOW_ALL = 16;
+    public static final int FLAG_HIDE_MARKERS = 32;
+    public static final int FLAG_HIDE_WALLS = 64;
+
     public static final int MIN_MAZE_SIZE_X = 3;
     public static final int MIN_MAZE_SIZE_Y = 3;
 
@@ -43,6 +52,8 @@ public class PlayScreen extends Game {
     public static final Color KEY_DIR_COLOR = new Color(0.7f, 0.7f, 0.7f);
     public static final Color KEY_PRESS_COLOR = new Color(0.98f, 0.98f, 0.98f);
 
+    private final int flags;
+
     private final Maze maze;
     private final MazeCollider collider;
     private final Camera camera;
@@ -60,21 +71,34 @@ public class PlayScreen extends Game {
 
     private float showKey;
 
+    private double angle;
+
     public PlayScreen() {
+        this(0);
+    }
+
+    public PlayScreen(int flags) {
+        this.flags = flags;
+
         maze = new Maze(null);
         maze.MAZE_WIDTH = MIN_MAZE_SIZE_X;
         maze.MAZE_HEIGHT = MIN_MAZE_SIZE_Y;
 
         maze.buildMaze();
-        maze.countDirs();
+        if ((flags & FLAG_INFINITE_MOVES) == 0) {
+            maze.countDirs();
+        }
 
         collider = new MazeCollider(20);
 
         camera = new Camera();
-        camera.setDestRange(VIEW_DISTANCE, true);
+        if ((flags & FLAG_SHOW_ALL) == 0) {
+            camera.setDestRange(VIEW_DISTANCE, true);
+        }
         camera.setDestScale(VIEW_SCALE, true);
 
         player = new Player(maze, collider, camera);
+        angle = player.angle;
 
         show = 0f;
         change = false;
@@ -105,8 +129,11 @@ public class PlayScreen extends Game {
 
             maze.buildMaze();
         }
-        maze.countDirs();
+        if ((flags & FLAG_INFINITE_MOVES) == 0) {
+            maze.countDirs();
+        }
         player.reset();
+        angle = player.angle;
     }
 
     public void blink(Color color) {
@@ -120,8 +147,24 @@ public class PlayScreen extends Game {
         blinkColor = color;
     }
 
+    public int rot(int dir, boolean invert) {
+        if ((flags & FLAG_ROTATE_VIEW) != 0) {
+            double rot = Math.toDegrees(angle) - 45d;
+            while (rot < 0d) rot += 360d;
+            int sec = (int) (rot / 90d);
+            dir -= invert ? -sec : sec;
+        }
+
+        if ((flags & FLAG_INVERT_KEYS) != 0) {
+            dir += invert ? -2 : 2;
+        }
+
+        return (dir %= 4) < 0 ? 4 + dir : dir;
+    }
+
     public void setDir(int dir) {
         if (show >= -0.3f) return;
+        dir = rot(dir, false);
 
         boolean wasDir = player.dir == dir;
 
@@ -130,10 +173,12 @@ public class PlayScreen extends Game {
 
         if (wasDir) return;
 
-        int rem = --maze.dirs[dir];
-        if (rem < 0) {
-            blink(Color.ORANGE);
-            next(false);
+        if ((flags & FLAG_INFINITE_MOVES) == 0) {
+            int rem = --maze.dirs[dir];
+            if (rem < 0) {
+                blink(Color.ORANGE);
+                next(false);
+            }
         }
     }
 
@@ -166,6 +211,7 @@ public class PlayScreen extends Game {
         else if (keys.isPressed(new int[] {KeyEvent.VK_W, KeyEvent.VK_UP})) setDir(1);
         else if (keys.isPressed(new int[] {KeyEvent.VK_D, KeyEvent.VK_RIGHT})) setDir(2);
         else if (keys.isPressed(new int[] {KeyEvent.VK_S, KeyEvent.VK_DOWN})) setDir(3);
+        else if (showKey == -1f) angle = player.absAngle;
 
         if (keys.handle(new int[] {KeyEvent.VK_R, KeyEvent.VK_NUMPAD0, KeyEvent.VK_CONTROL})) {
             next(false);
@@ -173,24 +219,31 @@ public class PlayScreen extends Game {
 
         int state = player.update(deltaTime);
 
-        boolean reset = false, change = false;
-        switch (state) {
-            case Player.AT_GOAL -> {
-                reset = true;
-                change = true;
-                blink(Color.GREEN);
+        if (show < 0f) {
+            boolean reset = false, change = false;
+            switch (state) {
+                case Player.AT_GOAL -> {
+                    reset = true;
+                    change = true;
+                    blink(Color.GREEN);
+                }
+                case Player.OFF_PATH -> {
+                    reset = true;
+                    blink(Color.RED);
+                }
+                case Player.FROZEN -> {
+                    reset = true;
+                    blink(Color.CYAN);
+                }
+                case Player.AT_WALL -> {
+                    if ((flags & FLAG_NO_WALL_TOUCH) == 0) break;
+                    reset = true;
+                    blink(Color.MAGENTA);
+                }
             }
-            case Player.OFF_PATH -> {
-                reset = true;
-                blink(Color.RED);
-            }
-            case Player.FROZEN -> {
-                reset = true;
-                blink(Color.CYAN);
-            }
-        }
 
-        if (reset) next(change);
+            if (reset) next(change);
+        }
     }
 
     @Override
@@ -236,96 +289,116 @@ public class PlayScreen extends Game {
         float pfx = left + (float) (int) player.x * gs;
         float pfy = top + (float) (int) player.y * gs;
 
-        graphics.setStroke(new BasicStroke(sw, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 2f));
+        AffineTransform transform = null;
+        try {
+            if ((flags & FLAG_ROTATE_VIEW) != 0) {
+                transform = graphics.getTransform();
+                graphics.rotate(player.angle - Math.PI / 2d, cx, cy);
+            }
 
-        graphics.setColor(Color.DARK_GRAY);
-        graphics.fillRoundRect((int) (left + gs * (double) d[0]), (int) (top + gs * (double) d[1]), (int) gs, (int) gs, fcr, fcr);
-        graphics.setColor(Color.LIGHT_GRAY);
-        graphics.fillRoundRect((int) (left + gs * (double) d[3]), (int) (top + gs * (double) d[4]), (int) gs, (int) gs, fcr, fcr);
+            graphics.setStroke(new BasicStroke(sw, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 2f));
 
-        graphics.setColor(mixColors(PULSE_OFF, PULSE_ON, pulseI));
-        graphics.drawRoundRect((int) (pfx + ws + sw), (int) (pfy + ws + sw), (int) (gs - tws - tsw), (int) (gs - tws - tsw), fcr, fcr);
+            if ((flags & FLAG_HIDE_MARKERS) == 0) {
+                graphics.setColor(Color.DARK_GRAY);
+                graphics.fillRoundRect((int) (left + gs * (double) d[0]), (int) (top + gs * (double) d[1]), (int) gs, (int) gs, fcr, fcr);
+                graphics.setColor(Color.LIGHT_GRAY);
+                graphics.fillRoundRect((int) (left + gs * (double) d[3]), (int) (top + gs * (double) d[4]), (int) gs, (int) gs, fcr, fcr);
+            }
 
-        float apx = player.x, apy = player.y;
-        float plx = left + apx * gs;
-        float ply = top + apy * gs;
-        float pr = player.radius * gs, tpr = pr * 2f;
-        //float pcr = pr / 4f;
+            graphics.setColor(mixColors(PULSE_OFF, PULSE_ON, pulseI));
+            graphics.drawRoundRect((int) (pfx + ws + sw), (int) (pfy + ws + sw), (int) (gs - tws - tsw), (int) (gs - tws - tsw), fcr, fcr);
 
-        float offAngle = 20f;
-        float angle = (float) Math.toDegrees(player.angle) + offAngle;
-        float arcAngle = 360f - offAngle * 2f;
+            float apx = player.x, apy = player.y;
+            float plx = left + apx * gs;
+            float ply = top + apy * gs;
+            float pr = player.radius * gs, tpr = pr * 2f;
+            //float pcr = pr / 4f;
 
-        graphics.setColor(Color.ORANGE);
-        //graphics.fillRoundRect((int) (plx - pr), (int) (ply - pr), (int) tpr, (int) tpr, (int) pcr, (int) pcr);
-        graphics.fillArc((int) (plx - pr), (int) (ply - pr), (int) tpr, (int) tpr, (int) angle, (int) arcAngle);
+            float offAngle = 20f;
+            float angle = (float) Math.toDegrees(player.angle) + offAngle;
+            float arcAngle = 360f - offAngle * 2f;
 
-        if (blinkOn) {
-            graphics.setColor(blinkColor);
-        } else {
-            graphics.setColor(GRID_COLOR);
-        }
+            graphics.setColor(Color.ORANGE);
+            //graphics.fillRoundRect((int) (plx - pr), (int) (ply - pr), (int) tpr, (int) tpr, (int) pcr, (int) pcr);
+            graphics.fillArc((int) (plx - pr), (int) (ply - pr), (int) tpr, (int) tpr, (int) angle, (int) arcAngle);
 
-        float wpx, wpy, wpd;
-        int wfy, wf;
-        for (int y = 0; y < mh; y++) {
-            final int[] row = m[y];
-            wfy = y == mh - 1 ? WB : 0;
-            wfy |= y == 0 ? WT : 0;
-            for (int x = 0; x < mw; x++) {
-                wf = wfy;
-                wf |= x == mw - 1 ? WR : 0;
-                wf |= x == 0 ? WL : 0;
-
-                wpx = apx - (float) (x) - 0.5f;
-                wpy = apy - (float) (y) - 0.5f;
-                wpd = wpx * wpx + wpy * wpy;
-                if (wpd > rangeSq) continue;
-
-                final int t = row[x];
-
-                final float ax = left + gs * x;
-                final float ay = top + gs * y;
-
-                final float s = gs * sd;
-
-                if ((t & WL) != 0) {
-                    final float os = (wf & WL) != 0 ? gs : s;
-                    graphics.fillRoundRect((int) (ax - ws),
-                                           (int) (ay - ows),
-                                           (int) tws,
-                                           (int) (os + ews),
-                                           wcr, wcr);
+            if ((flags & FLAG_HIDE_WALLS) == 0) {
+                if (blinkOn) {
+                    graphics.setColor(blinkColor);
+                } else {
+                    graphics.setColor(GRID_COLOR);
                 }
-                if ((t & WT) != 0) {
-                    final float os = (wf & WT) != 0 ? gs : s;
-                    graphics.fillRoundRect((int) (ax - ows),
-                                           (int) (ay - ws),
-                                           (int) (os + ews),
-                                           (int) tws,
-                                           wcr, wcr);
+
+                float wpx, wpy, wpd;
+                int wfy, wf;
+                for (int y = 0; y < mh; y++) {
+                    final int[] row = m[y];
+                    wfy = y == mh - 1 ? WB : 0;
+                    wfy |= y == 0 ? WT : 0;
+                    for (int x = 0; x < mw; x++) {
+                        wf = wfy;
+                        wf |= x == mw - 1 ? WR : 0;
+                        wf |= x == 0 ? WL : 0;
+
+                        wpx = apx - (float) (x) - 0.5f;
+                        wpy = apy - (float) (y) - 0.5f;
+                        wpd = wpx * wpx + wpy * wpy;
+                        if (wpd > rangeSq) continue;
+
+                        final int t = row[x];
+
+                        final float ax = left + gs * x;
+                        final float ay = top + gs * y;
+
+                        final float s = gs * sd;
+
+                        if ((t & WL) != 0) {
+                            final float os = (wf & WL) != 0 ? gs : s;
+                            graphics.fillRoundRect((int) (ax - ws),
+                                                   (int) (ay - ows),
+                                                   (int) tws,
+                                                   (int) (os + ews),
+                                                   wcr, wcr);
+                        }
+                        if ((t & WT) != 0) {
+                            final float os = (wf & WT) != 0 ? gs : s;
+                            graphics.fillRoundRect((int) (ax - ows),
+                                                   (int) (ay - ws),
+                                                   (int) (os + ews),
+                                                   (int) tws,
+                                                   wcr, wcr);
+                        }
+                        if ((t & WR) != 0) {
+                            final float os = (wf & WR) != 0 ? gs : s;
+                            graphics.fillRoundRect((int) (ax + gs - ws),
+                                                   (int) (ay - ows),
+                                                   (int) tws,
+                                                   (int) (os + ews),
+                                                   wcr, wcr);
+                        }
+                        if ((t & WB) != 0) {
+                            final float os = (wf & WB) != 0 ? gs : s;
+                            graphics.fillRoundRect((int) (ax - ows),
+                                                   (int) (ay + gs - ws),
+                                                   (int) (os + ews),
+                                                   (int) tws,
+                                                   wcr, wcr);
+                        }
+                    }
                 }
-                if ((t & WR) != 0) {
-                    final float os = (wf & WR) != 0 ? gs : s;
-                    graphics.fillRoundRect((int) (ax + gs - ws),
-                                           (int) (ay - ows),
-                                           (int) tws,
-                                           (int) (os + ews),
-                                           wcr, wcr);
-                }
-                if ((t & WB) != 0) {
-                    final float os = (wf & WB) != 0 ? gs : s;
-                    graphics.fillRoundRect((int) (ax - ows),
-                                           (int) (ay + gs - ws),
-                                           (int) (os + ews),
-                                           (int) tws,
-                                           wcr, wcr);
+
+                graphics.setColor(COLLISION_GRID_COLOR);
+                //collider.render(graphics, left, top, gs);
+            }
+        } finally {
+            if (transform != null) {
+                try {
+                    graphics.setTransform(transform);
+                } catch (Throwable tr) {
+                    tr.printStackTrace();
                 }
             }
         }
-
-        graphics.setColor(COLLISION_GRID_COLOR);
-        //collider.render(graphics, left, top, gs);
 
         drawInputs(graphics, gs * 0.6f, gs * 0.35f, gs * 0.09f, gs * 0.15f);
     }
@@ -362,10 +435,16 @@ public class PlayScreen extends Game {
     }
 
     private boolean drawDir(Graphics2D graphics, int dir, float x, float y, float size) {
-        boolean isDir = player.dir == dir;
+        int tDir = rot(dir, false);
+
+        boolean isDir = player.dir == tDir;
         boolean isDirPressed = isDir && showKey != -1f;
 
-        int amount = maze.dirs[dir];
+        int amount;
+        if ((flags & FLAG_INFINITE_MOVES) == 0) {
+            amount = maze.dirs[tDir];
+        } else amount = 1;
+
         if (amount <= 0 && !isDirPressed) {
             return false;
         }

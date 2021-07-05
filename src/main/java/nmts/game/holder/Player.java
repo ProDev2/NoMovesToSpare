@@ -17,7 +17,7 @@ public class Player {
     private final Camera camera;
     public float x, y;
     public int dir;
-    public double angle;
+    public double angle, absAngle;
     public float dx, dy;
 
     public float cps = 2.6f;
@@ -85,7 +85,9 @@ public class Player {
             rdx = (mdx / mdl) * prc;
             rdy = (mdy / mdl) * prc;
 
-            angle = Math.atan2(-mdy, mdx);
+            double nextAngle = Math.atan2(-ndy, ndx);
+            angle = lerpAngle(angle, nextAngle, deltaTime * cps * 2f);
+            absAngle = nextAngle;
         }
 
         float px = this.x + rdx, py = this.y + rdy;
@@ -130,5 +132,12 @@ public class Player {
         if (Maze.atGoal(pt)) return AT_GOAL;
         if (!Maze.atPath(pt)) return OFF_PATH;
         return state;
+    }
+
+    @SuppressWarnings("SpellCheckingInspection")
+    public static double lerpAngle(double s, double e, double t) {
+        while (e - s > Math.PI) s += Math.PI * 2d;
+        while (e - s < -Math.PI) s -= Math.PI * 2d;
+        return s + (e - s) * t;
     }
 }
