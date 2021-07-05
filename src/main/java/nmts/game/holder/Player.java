@@ -42,9 +42,11 @@ public class Player {
     }
 
     public void reset(boolean jump) {
+        float inset = Math.min(radius, 0.5f);
+
         int[] d = maze.data;
-        x = d[0] + Maths.clamp(x % 1f, PRECISION, 1f - PRECISION);
-        y = d[1] + Maths.clamp(y % 1f, PRECISION, 1f - PRECISION);
+        x = d[0] + Maths.clamp(x % 1f, inset, 1f - inset);
+        y = d[1] + Maths.clamp(y % 1f, inset, 1f - inset);
 
         int t = maze.maze[d[1]][d[0]];
         dir = Maze.pathDir(t);
@@ -66,26 +68,28 @@ public class Player {
         float ndx = Maze.dirX(dir);
         float ndy = Maze.dirY(dir);
 
-        dx += (ndx - dx) * deltaTime * cps;
-        dy += (ndy - dy) * deltaTime * cps;
+        dx = Maths.lerp(dx, ndx, deltaTime * cps);
+        dy = Maths.lerp(dy, ndy, deltaTime * cps);
 
         float mdx = dx * deltaTime * sps;
         float mdy = dy * deltaTime * sps;
+
         float mdl = (float) Math.pow(mdx * mdx + mdy * mdy, 0.5d);
+        float mdt = Math.max(mdl - prc, prc);
+        float rd = (float) Math.ceil(mdl * 1.1f);
 
-        angle = Math.atan2(-mdy, mdx);
+        float rdx, rdy;
+        if (mdl == 0d) {
+            rdy = rdx = 0f;
+        } else {
+            rdx = (mdx / mdl) * prc;
+            rdy = (mdy / mdl) * prc;
 
-        //float rdx = dx * radius;
-        //float rdy = dy * radius;
-
-        float rdx = dx * prc;
-        float rdy = dy * prc;
+            angle = Math.atan2(-mdy, mdx);
+        }
 
         float px = this.x + rdx, py = this.y + rdy;
-        float nx = px + mdx, ny = py + mdy;
-
         int apx = (int) this.x, apy = (int) this.y;
-        int anx = (int) nx, any = (int) ny;
 
         int pt;
         try {
@@ -96,35 +100,25 @@ public class Player {
         }
         boolean whw = Maze.wallDir(pt, dir);
 
-        float rd = (float) Math.ceil(mdl * 1.1f);
-
         collider.clear();
         collider.insert(m, apx, apy, (int) rd, 1d);
 
         double[] tr = new double[5];
-        if (collider.castSphere(tr, px, py, mdx, mdy, rd, radius - prc)
-                && tr[2] <= prc) {
+        if (collider.castSphere(tr, px, py, mdx, mdy, rd, radius - prc) && tr[2] <= mdt) {
+            mdx = (float) tr[0] - px;
+            mdy = (float) tr[1] - py;
+
             if (whw) {
                 dx = dy = 0f;
             } else {
-                dx = ndx;
-                dy = ndy;
+                float ls = (float) Math.pow(dx * dx + dy * dy, 0.5d);
+                dx = ndx * ls;
+                dy = ndy * ls;
             }
 
             state = AT_WALL;
-            move = false;
+            move = tr[2] > 0d;
         }
-
-        /*
-        if (apx != anx || apy != any) {
-            int pt = m[apy][apx];
-            if (Maze.wallDir(pt, dir)) {
-                return true;
-            }
-
-            int nt = m[any][anx];
-        }
-        */
 
         if (move) {
             this.x += mdx;
