@@ -29,12 +29,16 @@ public class Main {
                     flags |= PlayScreen.FLAG_NO_WALL_TOUCH;
                 } else if (cmd.equals("s") || cmd.equals("sk") || cmd.equals("swapkeys")) {
                     flags |= PlayScreen.FLAG_INVERT_KEYS;
+                } else if (cmd.equals("-vk") || cmd.equals("-viewkeys") || cmd.equals("-keys")) {
+                    flags |= PlayScreen.FLAG_HIDE_KEYS;
                 } else if (cmd.equals("va") || cmd.equals("viewall") || cmd.equals("all")) {
                     flags |= PlayScreen.FLAG_SHOW_ALL;
                 } else if (cmd.equals("-vm") || cmd.equals("-viewmarkers") || cmd.equals("-markers")) {
                     flags |= PlayScreen.FLAG_HIDE_MARKERS;
                 } else if (cmd.equals("-vw") || cmd.equals("-viewwalls") || cmd.equals("-walls")) {
                     flags |= PlayScreen.FLAG_HIDE_WALLS;
+                } else if (cmd.equals("vt") || cmd.equals("viewtime") || cmd.equals("time")) {
+                    flags |= PlayScreen.FLAG_SHOW_TIMER;
                 }
             }
         }

@@ -3,10 +3,12 @@ package nmts.game.screen;
 import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.awt.geom.AffineTransform;
+import java.io.InputStream;
 import nmts.game.holder.Camera;
 import nmts.game.holder.Maze;
 import nmts.game.holder.MazeCollider;
 import nmts.game.holder.Player;
+import nmts.game.time.StopWatch;
 import org.gvoid.engine.Game;
 import org.gvoid.engine.math.Maths;
 
@@ -20,9 +22,11 @@ public class PlayScreen extends Game {
     public static final int FLAG_INFINITE_MOVES = 2;
     public static final int FLAG_NO_WALL_TOUCH = 4;
     public static final int FLAG_INVERT_KEYS = 8;
-    public static final int FLAG_SHOW_ALL = 16;
-    public static final int FLAG_HIDE_MARKERS = 32;
-    public static final int FLAG_HIDE_WALLS = 64;
+    public static final int FLAG_HIDE_KEYS = 16;
+    public static final int FLAG_SHOW_ALL = 32;
+    public static final int FLAG_HIDE_MARKERS = 64;
+    public static final int FLAG_HIDE_WALLS = 128;
+    public static final int FLAG_SHOW_TIMER = 256;
 
     public static final int MIN_MAZE_SIZE_X = 3;
     public static final int MIN_MAZE_SIZE_Y = 3;
@@ -52,6 +56,22 @@ public class PlayScreen extends Game {
     public static final Color KEY_DIR_COLOR = new Color(0.7f, 0.7f, 0.7f);
     public static final Color KEY_PRESS_COLOR = new Color(0.98f, 0.98f, 0.98f);
 
+    public static final String FONT_PATH = "/fonts/JetBrainsMono-Bold.ttf";
+    public static final float FONT_SCALE = 0.22f;
+
+    public static final Font FONT;
+
+    static {
+        Font font = null;
+        try (InputStream in = PlayScreen.class.getResourceAsStream(FONT_PATH)) {
+            if (in == null) throw new NullPointerException("Resource not found");
+            font = Font.createFont(Font.TRUETYPE_FONT, in);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        FONT = font;
+    }
+
     private final int flags;
 
     private final Maze maze;
@@ -72,6 +92,11 @@ public class PlayScreen extends Game {
     private float showKey;
 
     private double angle;
+
+    private Font lastFont;
+    private float lastFontSize;
+
+    private final StopWatch stopWatch;
 
     public PlayScreen() {
         this(0);
@@ -109,6 +134,13 @@ public class PlayScreen extends Game {
         blink(Color.GREEN);
 
         showKey = -1f;
+
+        lastFont = null;
+        lastFontSize = -1f;
+
+        if ((flags & FLAG_SHOW_TIMER) != 0) {
+            stopWatch = new StopWatch();
+        } else stopWatch = null;
     }
 
     public void next(boolean ch) {
@@ -134,6 +166,10 @@ public class PlayScreen extends Game {
         }
         player.reset();
         angle = player.angle;
+
+        if ((flags & FLAG_SHOW_TIMER) != 0 && change) {
+            stopWatch.reset();
+        }
     }
 
     public void blink(Color color) {
@@ -244,6 +280,18 @@ public class PlayScreen extends Game {
 
             if (reset) next(change);
         }
+    }
+
+    public Font getFont(Float size) {
+        if (size == null) return lastFont;
+        if (FONT == null) return null;
+        Font font = lastFontSize == size ? lastFont : null;
+        if (font == null) {
+            font = FONT.deriveFont(size);
+            lastFont = font;
+            lastFontSize = size;
+        }
+        return font;
     }
 
     @Override
@@ -400,7 +448,20 @@ public class PlayScreen extends Game {
             }
         }
 
-        drawInputs(graphics, gs * 0.6f, gs * 0.35f, gs * 0.09f, gs * 0.15f);
+        if ((flags & FLAG_HIDE_KEYS) == 0) {
+            drawInputs(graphics, gs * 0.6f, gs * 0.35f, gs * 0.09f, gs * 0.15f);
+        }
+
+        if ((flags & FLAG_SHOW_TIMER) != 0) {
+            Font font = getFont(gs * FONT_SCALE);
+            graphics.setFont(font);
+
+            stopWatch.update();
+            graphics.setColor(Color.WHITE);
+            graphics.drawString(stopWatch.toString(),
+                                gs * 0.1f,
+                                gs * 0.1f + graphics.getFontMetrics().getHeight() / 2f);
+        }
     }
 
     public void drawInputs(Graphics2D graphics, float sizeX, float sizeY, float offset, float inset) {
